@@ -90,28 +90,32 @@ if cuda:
     model = model.to(device)
     l1_criterion = l1_criterion.to(device)
 
-if args.pretrained:
+#加载预训练模型
+if args.pretrained:                                                     #1.判断是否提供了 pretrained 参数
 
-    if os.path.isfile(args.pretrained):
-        print("===> loading models '{}'".format(args.pretrained))
-        checkpoint = torch.load(args.pretrained)
-        new_state_dcit = OrderedDict()
-        for k, v in checkpoint.items():
-            if 'module' in k:
-                name = k[7:]
+    if os.path.isfile(args.pretrained):                                 #2.检查 args.pretrained 是否是一个有效的文件路径
+        print("===> loading models '{}'".format(args.pretrained))       #如果文件存在，则打印 eg.:loading models 'checkpoints/IMDN_x2.pth'
+        checkpoint = torch.load(args.pretrained)                        #3.加载 PyTorch训练好的模型文件（.pth），返回一个模型的权重字典OrderedDict/state_dict，checkpoint.items() 代表所有的层名称和对应的权重值。
+        
+       #4.处理 state_dict权重字典，去掉 module. 前缀（如果存在）
+        new_state_dcit = OrderedDict()                                    #4.1 创建一个有序字典（用于存储处理后的权重）
+        for k, v in checkpoint.items():                                   #4.2 遍历权重文件中的所有键值对 ；.pth 文件中的所有参数名称 (k) 和对应的权重 (v)
+            if 'module' in k:                                             #4.3 参数名中是否有modeL
+                name = k[7:]                                              #4.4 有，去掉，"module." 长度是 7
             else:
                 name = k
-            new_state_dcit[name] = v
-        model_dict = model.state_dict()
-        pretrained_dict = {k: v for k, v in new_state_dcit.items() if k in model_dict}
+            new_state_dcit[name] = v                                      #4.5 存入去掉 module. 前缀后的键值对--经过这一步后，new_state_dcit 里存储的是处理过的预训练模型的参数名称和权重
+        #5.预训练模型和当前模型参数匹配
+        model_dict = model.state_dict()                                                   #5.1 获取当前模型（正在训练的模型）的参数字典
+        pretrained_dict = {k: v for k, v in new_state_dcit.items() if k in model_dict}    #5.2 遍历预训练模型字典，仅保留预训练模型在当前模型结构中存在的参数，过滤不匹配参数---new_state_dcit.items()：遍历预训练模型的参数字典
 
-        for k, v in model_dict.items():
-            if k not in pretrained_dict:
+        for k, v in model_dict.items():                                                   #5.3 遍历当前模型的所有参数，检查已过滤后的预训练模型中是否缺少当前模型的某些参数
+            if k not in pretrained_dict:                                                  #5.4 如果预训练中没有，打印
                 print(k)
-        model.load_state_dict(pretrained_dict, strict=True)
+        model.load_state_dict(pretrained_dict, strict=True)                               #5.5 strict=True：严格匹配参数，如果 pretrained_dict 里少了 model_dict 里的任何参数，就会报错。strict=False：允许部分加载，如果有些参数匹配不上，就会跳过加载，但不会报错
 
     else:
-        print("===> no models found at '{}'".format(args.pretrained))
+        print("===> no models found at '{}'".format(args.pretrained))  #如不存在，则打印。。。，不会加载模型，直接跳过
 
 print("===> Setting Optimizer")
 

@@ -72,7 +72,7 @@ class IMDN(nn.Module):
         out_B6 = self.IMDB6(out_B5)                          #  in(B,64,H,W),out(B,64,H,W)   
 
         out_B = self.c(torch.cat([out_B1, out_B2, out_B3, out_B4, out_B5, out_B6], dim=1))   #  6个IMDB块连接（残差连接）并1*1卷积（聚合），in(B,64*6,H,W),out(B,64,H,W) 
-        out_lr = self.LR_conv(out_B) + out_fea               #  残差连接  IMDB块输出特征再3*3卷积  +  初步特征提取，实现浅层特征+深层特征的    
+        out_lr = self.LR_conv(out_B) + out_fea               #  残差连接  IMDB块输出特征再3*3卷积  +  初步特征提取，实现浅层特征+深层特征的    out(B,64,H,W）
         output = self.upsampler(out_lr)                      #  上采样
         return output
 

@@ -44,16 +44,16 @@ class IMDN(nn.Module):
     def __init__(self, in_nc=3, nf=64, num_modules=6, out_nc=3, upscale=4):
         super(IMDN, self).__init__()
 
-        self.fea_conv = B.conv_layer(in_nc, nf, kernel_size=3)
+        self.fea_conv = B.conv_layer(in_nc, nf, kernel_size=3)              #  从LR图像中进行初步特征提取   in(B,3,H,W),out(B,64,H,W)
 
         # IMDBs
-        self.IMDB1 = B.IMDModule(in_channels=nf)
-        self.IMDB2 = B.IMDModule(in_channels=nf)
-        self.IMDB3 = B.IMDModule(in_channels=nf)
+        self.IMDB1 = B.IMDModule(in_channels=nf)                            #  in(B,64,H,W),out(B,64,H,W)   
+        self.IMDB2 = B.IMDModule(in_channels=nf)                            #  in(B,64,H,W),out(B,64,H,W)
+        self.IMDB3 = B.IMDModule(in_channels=nf)                            #  in(B,64,H,W),out(B,64,H,W)
         self.IMDB4 = B.IMDModule(in_channels=nf)
         self.IMDB5 = B.IMDModule(in_channels=nf)
-        self.IMDB6 = B.IMDModule(in_channels=nf)
-        self.c = B.conv_block(nf * num_modules, nf, kernel_size=1, act_type='lrelu')
+        self.IMDB6 = B.IMDModule(in_channels=nf)                            #  in(B,64,H,W),out(B,64,H,W)
+        self.c = B.conv_block(nf * num_modules, nf, kernel_size=1, act_type='lrelu')            #
 
         self.LR_conv = B.conv_layer(nf, nf, kernel_size=3)
 

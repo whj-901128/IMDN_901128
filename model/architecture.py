@@ -53,7 +53,7 @@ class IMDN(nn.Module):
         self.IMDB4 = B.IMDModule(in_channels=nf)
         self.IMDB5 = B.IMDModule(in_channels=nf)
         self.IMDB6 = B.IMDModule(in_channels=nf)                            #  in(B,64,H,W),out(B,64,H,W)
-        self.c = B.conv_block(nf * num_modules, nf, kernel_size=1, act_type='lrelu')            #
+        self.c = B.conv_block(nf * num_modules, nf, kernel_size=1, act_type='lrelu')            #1*1 卷积，特征融合 
 
         self.LR_conv = B.conv_layer(nf, nf, kernel_size=3)
 
@@ -62,17 +62,18 @@ class IMDN(nn.Module):
 
 
     def forward(self, input):
-        out_fea = self.fea_conv(input)
-        out_B1 = self.IMDB1(out_fea)
-        out_B2 = self.IMDB2(out_B1)
+        out_fea = self.fea_conv(input)                       # 初步特征提取  in(B,3,H,W),out(B,64,H,W)
+        # IMDB块 渐进细化特征
+        out_B1 = self.IMDB1(out_fea)                         #  in(B,64,H,W),out(B,64,H,W) 
+        out_B2 = self.IMDB2(out_B1)    
         out_B3 = self.IMDB3(out_B2)
         out_B4 = self.IMDB4(out_B3)
         out_B5 = self.IMDB5(out_B4)
-        out_B6 = self.IMDB6(out_B5)
+        out_B6 = self.IMDB6(out_B5)                          #  in(B,64,H,W),out(B,64,H,W)   
 
-        out_B = self.c(torch.cat([out_B1, out_B2, out_B3, out_B4, out_B5, out_B6], dim=1))
-        out_lr = self.LR_conv(out_B) + out_fea
-        output = self.upsampler(out_lr)
+        out_B = self.c(torch.cat([out_B1, out_B2, out_B3, out_B4, out_B5, out_B6], dim=1))   #  6个IMDB块连接（残差连接）并1*1卷积（聚合），in(B,64*6,H,W),out(B,64,H,W) 
+        out_lr = self.LR_conv(out_B) + out_fea               #  残差连接  IMDB块输出特征再3*3卷积  +  初步特征提取，实现浅层特征+深层特征的    
+        output = self.upsampler(out_lr)                      #  上采样
         return output
 
 # AI in RTC Image Super-Resolution Algorithm Performance Comparison Challenge (Winner solution)

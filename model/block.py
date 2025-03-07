@@ -74,16 +74,18 @@ class ShortcutBlock(nn.Module):
         output = x + self.sub(x)
         return output
 
+#计算特征图 F每个通道的均值---主要作用：对输入特征图F进行空间维度上的全局平均池化  输出形状(B, C, 1, 1)
 def mean_channels(F):
-    assert(F.dim() == 4)
-    spatial_sum = F.sum(3, keepdim=True).sum(2, keepdim=True)
-    return spatial_sum / (F.size(2) * F.size(3))
+    assert(F.dim() == 4)                                         # F(batch,c,H,W)
+    spatial_sum = F.sum(3, keepdim=True).sum(2, keepdim=True)    # 计算每个通道内的所有像素总和，对输入F在高度（H）和宽度（W）两个维度上进行求和，最终得到每个通道的总和。返回形状：(batch, c, 1, 1)
+    return spatial_sum / (F.size(2) * F.size(3))                 # 计算每个通道的均值  每个通道的spatial_sum_ij/(H*W)
 
+#计算特征图 F在通道维度上的标准差 --衡量通道内部特征的离散程度（对比度）  输出形状(B, C, 1, 1)
 def stdv_channels(F):
-    assert(F.dim() == 4)
-    F_mean = mean_channels(F)
-    F_variance = (F - F_mean).pow(2).sum(3, keepdim=True).sum(2, keepdim=True) / (F.size(2) * F.size(3))
-    return F_variance.pow(0.5)
+    assert(F.dim() == 4)                     #确保输入是四维张量 (batch, channel, height, width)
+    F_mean = mean_channels(F)                #得到每个通道的均值   结果形状：(batch, channel, 1, 1)
+    F_variance = (F - F_mean).pow(2).sum(3, keepdim=True).sum(2, keepdim=True) / (F.size(2) * F.size(3))    #形状(B, C, 1, 1)，计算每个通道的方差，表示该通道内所有像素值围绕均值的离散程度 
+    return F_variance.pow(0.5)               #计算标准差  ---方差开平方，衡量通道内部特征的离散程度（对比度）  形状(B, C, 1, 1)
 
 def sequential(*args):
     if len(args) == 1:
@@ -99,7 +101,7 @@ def sequential(*args):
             modules.append(module)
     return nn.Sequential(*modules)
 
-# contrast-aware channel attention module
+# contrast-aware channel attention module 
 class CCALayer(nn.Module):
     def __init__(self, channel, reduction=16):
         super(CCALayer, self).__init__()

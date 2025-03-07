@@ -58,7 +58,7 @@ class IMDN(nn.Module):
         self.LR_conv = B.conv_layer(nf, nf, kernel_size=3)
 
         upsample_block = B.pixelshuffle_block
-        self.upsampler = upsample_block(nf, out_nc, upscale_factor=upscale)
+        self.upsampler = upsample_block(nf, out_nc, upscale_factor=upscale)  #上采样，✖4放大，得到HR图像
 
 
     def forward(self, input):

@@ -123,7 +123,7 @@ class CCALayer(nn.Module):
         y = self.conv_du(y)                          # 生成通道注意力权重，调用多层卷积函数，强特征提取能力
         return x * y                                 # 逐通道加权  x（B, C, H, W），y(B, C, 1, 1),所以，输出形状（B, C, H, W））
 
-#信息多重蒸馏机制---通过分层提取和蒸馏特征，以增强特征表达能力
+#信息多重蒸馏机制---通过分层提取和蒸馏特征，以增强特征表达能力，最终输出的是经过 信息多重蒸馏机制​处理后的特征图  最终输出（B,64,H,W）
 class IMDModule(nn.Module):
     def __init__(self, in_channels, distillation_rate=0.25):                        #in_channels=64   distillation_rate=0.25蒸馏率
         super(IMDModule, self).__init__()

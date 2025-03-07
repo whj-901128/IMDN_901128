@@ -101,25 +101,27 @@ def sequential(*args):
             modules.append(module)
     return nn.Sequential(*modules)
 
-# contrast-aware channel attention module 
+# contrast-aware channel attention module   --生成通道注意力权重（具有对比度感知的），输出形状（B, C, H, W）
 class CCALayer(nn.Module):
     def __init__(self, channel, reduction=16):
         super(CCALayer, self).__init__()
 
         self.contrast = stdv_channels
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)         #输出特征图大小1*1，自适应平均池化（求每个通道的均值），输出的特征图大小是固定的，而输入的特征图大小可以是任意的，功能与前面的自定义函数mean_channels(F)类似
+        
+        #定义了一个多层卷积--将输入y（b,64,1,1）经过降维、激活、升维和 Sigmoid 激活，得到一个形状为 (batch_size, channel, 1, 1) 的注意力权重图。
         self.conv_du = nn.Sequential(
-            nn.Conv2d(channel, channel // reduction, 1, padding=0, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(channel // reduction, channel, 1, padding=0, bias=True),
-            nn.Sigmoid()
-        )
+            nn.Conv2d(channel, channel // reduction, 1, padding=0, bias=True),   #1*1  in(64),out(64/16=4)  降维   减少计算量，保留主要特征             （b,4,1,1） 
+            nn.ReLU(inplace=True), 
+            nn.Conv2d(channel // reduction, channel, 1, padding=0, bias=True),   #1*1  in(64/16=4),out(64)  升维   恢复通道数，为每个通道生成注意力权重  （b,64,1,1）
+            nn.Sigmoid()                                                         #将输出值限制在 [0, 1] 范围内，作为注意力权重
+        ) 
 
 
     def forward(self, x):
-        y = self.contrast(x) + self.avg_pool(x)
-        y = self.conv_du(y)
-        return x * y
+        y = self.contrast(x) + self.avg_pool(x)      # 提取每个通道的(B, C, 1, 1)标准差（对比度特征）和 (B, C, 1, 1)全局均值 ，输出(B, C, 1, 1) --反映每个通道的整体信息 
+        y = self.conv_du(y)                          # 生成通道注意力权重，调用多层卷积函数，强特征提取能力
+        return x * y                                 # 逐通道加权  x（B, C, H, W），y(B, C, 1, 1),所以，输出形状（B, C, H, W））
 
 #信息多重蒸馏机制---通过分层提取和蒸馏特征，以增强特征表达能力
 class IMDModule(nn.Module):
@@ -132,7 +134,7 @@ class IMDModule(nn.Module):
         self.c3 = conv_layer(self.remaining_channels, in_channels, 3)               #3*3卷积  处理 c2 余下的3/4特征,                  in(64*3/4,H,W),out(64,H,W)
         self.c4 = conv_layer(self.remaining_channels, self.distilled_channels, 3)   #3*3卷积  处理 c3 余下的3/4特征, 且输出为64*1/4    in(64*3/4,H,W),out(64*1/4,H,W)
         self.act = activation('lrelu', neg_slope=0.05)                       #调用自定义激活函数
-        self.c5 = conv_layer(in_channels, in_channels, 1)                           #1*1卷积  in(64,H,W),out(64,H,W)
+        self.c5 = conv_layer(in_channels, in_channels, 1)                           #1*1卷积  
         self.cca = CCALayer(self.distilled_channels * 4)  
 
     def forward(self, input):
@@ -148,9 +150,9 @@ class IMDModule(nn.Module):
      #第4级  卷积
         out_c4 = self.c4(remaining_c3)                     #                        in:48,out:16
      #特征拼接  concat
-        out = torch.cat([distilled_c1, distilled_c2, distilled_c3, out_c4], dim=1)      #in:16+16+16+16, out:64，恢复到in_channels
+        out = torch.cat([distilled_c1, distilled_c2, distilled_c3, out_c4], dim=1)      #in:16+16+16+16, out:64，恢复到in_channels  
      #
-        out_fused = self.c5(self.cca(out)) + input         #1*1卷积                       
+        out_fused = self.c5(self.cca(out)) + input     #1*1卷积  最终输出（B,64,H,W）      out:(B,64,H,W), self.cca(out) :(B,64,H,W), self.c5(self.cca(out)): (B,64,H,W), input:(B,64,H,W)            
         return out_fused
 
 class IMDModule_speed(nn.Module):

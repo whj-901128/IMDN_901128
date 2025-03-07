@@ -51,7 +51,7 @@ def conv_block(in_nc, out_nc, kernel_size, stride=1, dilation=1, groups=1, bias=
     n = norm(norm_type, out_nc) if norm_type else None
     return sequential(p, c, n, a)
 
-
+#定义激活函数
 def activation(act_type, inplace=True, neg_slope=0.05, n_prelu=1):
     act_type = act_type.lower()
     if act_type == 'relu':
@@ -119,30 +119,36 @@ class CCALayer(nn.Module):
         y = self.conv_du(y)
         return x * y
 
-
+#信息多重蒸馏机制---通过分层提取和蒸馏特征，以增强特征表达能力
 class IMDModule(nn.Module):
-    def __init__(self, in_channels, distillation_rate=0.25):
+    def __init__(self, in_channels, distillation_rate=0.25):                        #in_channels=64   distillation_rate=0.25蒸馏率
         super(IMDModule, self).__init__()
-        self.distilled_channels = int(in_channels * distillation_rate)
-        self.remaining_channels = int(in_channels - self.distilled_channels)
-        self.c1 = conv_layer(in_channels, in_channels, 3)
-        self.c2 = conv_layer(self.remaining_channels, in_channels, 3)
-        self.c3 = conv_layer(self.remaining_channels, in_channels, 3)
-        self.c4 = conv_layer(self.remaining_channels, self.distilled_channels, 3)
-        self.act = activation('lrelu', neg_slope=0.05)
-        self.c5 = conv_layer(in_channels, in_channels, 1)
-        self.cca = CCALayer(self.distilled_channels * 4)
+        self.distilled_channels = int(in_channels * distillation_rate)              #distilled_channels=64*1/4   每层提取 1/4 的特征用于输出
+        self.remaining_channels = int(in_channels - self.distilled_channels)        #remaining_channels=64*3/4   其余 3/4 继续传递
+        self.c1 = conv_layer(in_channels, in_channels, 3)                           #3*3卷积  对整个输入特征进行第一次提取             in(64,H,W),out(64,H,W)
+        self.c2 = conv_layer(self.remaining_channels, in_channels, 3)               #3*3卷积  处理 c1 余下的3/4特征,                  in(64*3/4,H,W),out(64,H,W)
+        self.c3 = conv_layer(self.remaining_channels, in_channels, 3)               #3*3卷积  处理 c2 余下的3/4特征,                  in(64*3/4,H,W),out(64,H,W)
+        self.c4 = conv_layer(self.remaining_channels, self.distilled_channels, 3)   #3*3卷积  处理 c3 余下的3/4特征, 且输出为64*1/4    in(64*3/4,H,W),out(64*1/4,H,W)
+        self.act = activation('lrelu', neg_slope=0.05)                       #调用自定义激活函数
+        self.c5 = conv_layer(in_channels, in_channels, 1)                           #1*1卷积  in(64,H,W),out(64,H,W)
+        self.cca = CCALayer(self.distilled_channels * 4)  
 
     def forward(self, input):
-        out_c1 = self.act(self.c1(input))
-        distilled_c1, remaining_c1 = torch.split(out_c1, (self.distilled_channels, self.remaining_channels), dim=1)
-        out_c2 = self.act(self.c2(remaining_c1))
-        distilled_c2, remaining_c2 = torch.split(out_c2, (self.distilled_channels, self.remaining_channels), dim=1)
-        out_c3 = self.act(self.c3(remaining_c2))
-        distilled_c3, remaining_c3 = torch.split(out_c3, (self.distilled_channels, self.remaining_channels), dim=1)
-        out_c4 = self.c4(remaining_c3)
-        out = torch.cat([distilled_c1, distilled_c2, distilled_c3, out_c4], dim=1)
-        out_fused = self.c5(self.cca(out)) + input
+     #第1级  卷积+蒸馏（拆分）
+        out_c1 = self.act(self.c1(input))                  # 先3*3卷积+再lrelu激活   in:64,out:64
+        distilled_c1, remaining_c1 = torch.split(out_c1, (self.distilled_channels, self.remaining_channels), dim=1)   #拆分out_c1通道 ,16个通道作为蒸馏特征,48个继续传递
+     #第2级  卷积+蒸馏（拆分）
+        out_c2 = self.act(self.c2(remaining_c1))           #                        in:48,out:64
+        distilled_c2, remaining_c2 = torch.split(out_c2, (self.distilled_channels, self.remaining_channels), dim=1)   #拆分out_c2通道 ,16个通道作为蒸馏特征,48个继续传递
+     #第3级  卷积+蒸馏（拆分）   
+        out_c3 = self.act(self.c3(remaining_c2))           #                        in:48,out:64
+        distilled_c3, remaining_c3 = torch.split(out_c3, (self.distilled_channels, self.remaining_channels), dim=1)   #拆分out_c3通道 ,16个通道作为蒸馏特征,48个继续传递
+     #第4级  卷积
+        out_c4 = self.c4(remaining_c3)                     #                        in:48,out:16
+     #特征拼接  concat
+        out = torch.cat([distilled_c1, distilled_c2, distilled_c3, out_c4], dim=1)      #in:16+16+16+16, out:64，恢复到in_channels
+     #
+        out_fused = self.c5(self.cca(out)) + input         #1*1卷积                       
         return out_fused
 
 class IMDModule_speed(nn.Module):

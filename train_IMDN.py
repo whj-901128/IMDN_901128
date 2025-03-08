@@ -143,36 +143,38 @@ def train(epoch):
             print("===> Epoch[{}]({}/{}): Loss_l1: {:.5f}".format(epoch, iteration, len(training_data_loader),
                                                                   loss_l1.item()))
 
-
+#验证（validation）一个超分辨率SR模型的性能，计算 PSNR（峰值信噪比）和 SSIM（结构相似性）两个指标
 def valid():
-    model.eval()
-
+    model.eval()    
+    #遍历测试数据集
     avg_psnr, avg_ssim = 0, 0
     for batch in testing_data_loader:
         lr_tensor, hr_tensor = batch[0], batch[1]
         if args.cuda:
             lr_tensor = lr_tensor.to(device)
             hr_tensor = hr_tensor.to(device)
-
+        #禁用梯度运算
         with torch.no_grad():
             pre = model(lr_tensor)
-
-        sr_img = utils.tensor2np(pre.detach()[0])
+        # 处理图像数据
+        sr_img = utils.tensor2np(pre.detach()[0])           #从 pre 中分离计算图，并取出第一个样本（批量第一个）
         gt_img = utils.tensor2np(hr_tensor.detach()[0])
+        #裁剪边缘
         crop_size = args.scale
-        cropped_sr_img = utils.shave(sr_img, crop_size)
+        cropped_sr_img = utils.shave(sr_img, crop_size)     #utils.shave()：去除图像边缘 crop_size 像素，可能是为了消除边缘效应（如零填充或上采样导致的失真）。
         cropped_gt_img = utils.shave(gt_img, crop_size)
-        if args.isY is True:
-            im_label = utils.quantize(sc.rgb2ycbcr(cropped_gt_img)[:, :, 0])
+        #选择颜色通道
+        if args.isY is True:                                                        # args.isY 表示是否只使用亮度通道（Y 通道），
+            im_label = utils.quantize(sc.rgb2ycbcr(cropped_gt_img)[:, :, 0])        # 转换为 YCbCr 颜色空间，取 Y（亮度）通道进行评估
             im_pre = utils.quantize(sc.rgb2ycbcr(cropped_sr_img)[:, :, 0])
         else:
-            im_label = cropped_gt_img
+            im_label = cropped_gt_img                                               #若 args.isY 为 False，直接使用完整的 RGB 计算指标
             im_pre = cropped_sr_img
-        avg_psnr += utils.compute_psnr(im_pre, im_label)
-        avg_ssim += utils.compute_ssim(im_pre, im_label)
+        avg_psnr += utils.compute_psnr(im_pre, im_label)                            #计算PSNR  
+        avg_ssim += utils.compute_ssim(im_pre, im_label)                            #计算SSIM
     print("===> Valid. psnr: {:.4f}, ssim: {:.4f}".format(avg_psnr / len(testing_data_loader), avg_ssim / len(testing_data_loader)))
 
-
+# 保存训练参数，作为下一次的预训练
 def save_checkpoint(epoch):
     model_folder = "checkpoint_x{}/".format(args.scale)
     model_out_path = model_folder + "epoch_{}.pth".format(epoch)
@@ -192,6 +194,6 @@ def print_network(net):
 print("===> Training")
 print_network(model)
 for epoch in range(args.start_epoch, args.nEpochs + 1):
-    valid()
-    train(epoch)
-    save_checkpoint(epoch)
+    valid()                                                  #调用模型性能计算模块--得到PSNR和SSIM值
+    train(epoch)                                             #调用训练模块
+    save_checkpoint(epoch)                                   #保存模型的参数，下一次train时的作为预训练模型参数
